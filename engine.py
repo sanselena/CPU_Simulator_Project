@@ -32,3 +32,106 @@ class SimulationEngine:
         # Record response time if this is the first time it gets the CPU
         if self.cpu_active_process.response_time == -1:
             self.cpu_active_process.response_time = self.clock - self.cpu_active_process.arrival_time
+
+    def run_fcfs(self, incoming_processes):
+        """Simulates the First-Come-First-Served scheduling algorithm."""
+        print("\n--- Starting FCFS Simulation ---")
+        
+        # Keep running as long as there are processes yet to arrive, 
+        # processes in the ready queue, or a process currently running
+        while incoming_processes or self.ready_queue or self.cpu_active_process:
+            
+            # 1. Check for new arrivals at the current clock time
+            arrived_this_tick = [p for p in incoming_processes if p.arrival_time == self.clock]
+            for p in arrived_this_tick:
+                self.add_to_ready_queue(p)
+                incoming_processes.remove(p)
+                print(f"[Time {self.clock} ms] {p.pid} arrived and joined Ready Queue.")
+
+            # 2. Check if the currently running process has finished
+            if self.cpu_active_process and self.cpu_active_process.remaining_time == 0:
+                self.cpu_active_process.state = "TERMINATED"
+                self.cpu_active_process.completion_time = self.clock
+                
+                # Calculate metrics for the finished process
+                p = self.cpu_active_process
+                p.turnaround_time = p.completion_time - p.arrival_time
+                p.waiting_time = p.turnaround_time - p.burst_time
+                
+                self.completed_processes.append(p)
+                print(f"[Time {self.clock} ms] {p.pid} TERMINATED.")
+                self.cpu_active_process = None
+
+            # 3. Assign CPU if it's idle and the ready queue has waiting processes
+            if self.cpu_active_process is None and self.ready_queue:
+                # FCFS: Take the first process that arrived (index 0)
+                next_process = self.ready_queue.pop(0)
+                
+                print(f"[Time {self.clock} ms] Context Switch: CPU assigned to {next_process.pid}")
+                self.context_switch(next_process) # This automatically ticks the clock by 1ms
+                continue # Skip to the next loop iteration since 1ms passed during context switch
+
+            # 4. Execute the active process
+            if self.cpu_active_process:
+                self.cpu_active_process.remaining_time -= 1
+                
+            # Advance the global clock by 1 millisecond
+            self.tick(1)
+            
+        print("--- FCFS Simulation Complete ---")
+
+    def run_round_robin(self, incoming_processes, time_quantum=3):
+        """Simulates the Round Robin scheduling algorithm with a fixed time quantum."""
+        print(f"\n--- Starting Round Robin Simulation (Quantum = {time_quantum}ms) ---")
+        quantum_elapsed = 0
+        
+        while incoming_processes or self.ready_queue or self.cpu_active_process:
+            
+            # 1. Check for new arrivals at the current clock time
+            arrived_this_tick = [p for p in incoming_processes if p.arrival_time == self.clock]
+            for p in arrived_this_tick:
+                self.add_to_ready_queue(p)
+                incoming_processes.remove(p)
+                print(f"[Time {self.clock} ms] {p.pid} arrived and joined Ready Queue.")
+
+            # 2. Check if the currently running process needs to be removed
+            if self.cpu_active_process:
+                # Scenario A: The process finished completely
+                if self.cpu_active_process.remaining_time == 0:
+                    self.cpu_active_process.state = "TERMINATED"
+                    self.cpu_active_process.completion_time = self.clock
+                    
+                    p = self.cpu_active_process
+                    p.turnaround_time = p.completion_time - p.arrival_time
+                    p.waiting_time = p.turnaround_time - p.burst_time
+                    
+                    self.completed_processes.append(p)
+                    print(f"[Time {self.clock} ms] {p.pid} TERMINATED.")
+                    self.cpu_active_process = None
+                    quantum_elapsed = 0 # Reset the buzzer
+                    
+                # Scenario B: The 3ms quantum expired, but the process isn't done
+                elif quantum_elapsed == time_quantum:
+                    print(f"[Time {self.clock} ms] Quantum expired! {self.cpu_active_process.pid} preempted.")
+                    self.add_to_ready_queue(self.cpu_active_process) # Back to the line!
+                    self.cpu_active_process = None
+                    quantum_elapsed = 0 # Reset the buzzer
+
+            # 3. Assign CPU if it's idle and the ready queue has waiting processes
+            if self.cpu_active_process is None and self.ready_queue:
+                next_process = self.ready_queue.pop(0)
+                
+                print(f"[Time {self.clock} ms] Context Switch: CPU assigned to {next_process.pid}")
+                self.context_switch(next_process) 
+                quantum_elapsed = 0 # Ensure the new process gets a full 3ms
+                continue # Skip to the next loop iteration (1ms passed during context switch)
+
+            # 4. Execute the active process
+            if self.cpu_active_process:
+                self.cpu_active_process.remaining_time -= 1
+                quantum_elapsed += 1 # Tick the buzzer closer to 3ms
+                
+            # Advance the global clock by 1 millisecond
+            self.tick(1)
+            
+        print("--- Round Robin Simulation Complete ---")
