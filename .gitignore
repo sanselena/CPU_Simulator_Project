@@ -7,3 +7,6 @@ env/
 .vs/
 *.sln
 *.pyproj
+build/
+dist/
+*.spec
